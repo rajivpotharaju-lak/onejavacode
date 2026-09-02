@@ -243,6 +243,7 @@
             position: relative;
         }
         .cart-count {
+            transition: transform 0.2s ease;
             position: absolute;
             top: -2px;
             right: -2px;
@@ -547,7 +548,8 @@
             transition: var(--transition);
             backdrop-filter: blur(4px);
         }
-        .product-card .wish-btn:hover {
+        .product-card .wish-btn:hover,
+        .product-card .wish-btn.active {
             background: #fff;
             color: var(--accent);
             transform: scale(1.10);
@@ -919,6 +921,108 @@
             font-size: 13px;
         }
 
+
+        /* ========== CART DRAWER ========== */
+        .cart-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.35);
+            opacity: 0;
+            visibility: hidden;
+            transition: var(--transition);
+            z-index: 200;
+        }
+        .cart-overlay.open {
+            opacity: 1;
+            visibility: visible;
+        }
+        .cart-drawer {
+            position: fixed;
+            top: 0;
+            right: 0;
+            width: min(420px, 92vw);
+            height: 100vh;
+            background: #fff;
+            box-shadow: -12px 0 40px rgba(26,26,46,.16);
+            transform: translateX(100%);
+            transition: var(--transition);
+            z-index: 201;
+            display: flex;
+            flex-direction: column;
+        }
+        .cart-drawer.open {
+            transform: translateX(0);
+        }
+        .cart-drawer-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 22px;
+            border-bottom: 1px solid rgba(26,26,46,.08);
+        }
+        .cart-drawer-header h3 { font-size: 20px; }
+        .close-cart {
+            width: 38px;
+            height: 38px;
+            border-radius: 50%;
+            background: var(--surface);
+            font-size: 18px;
+        }
+        .cart-items {
+            flex: 1;
+            overflow: auto;
+            padding: 18px 22px;
+        }
+        .cart-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px 0;
+            border-bottom: 1px solid rgba(26,26,46,.07);
+        }
+        .cart-item img {
+            width: 64px;
+            height: 64px;
+            border-radius: 10px;
+            object-fit: cover;
+        }
+        .cart-item-info { flex: 1; }
+        .cart-item-info strong { display:block; font-size:14px; }
+        .cart-item-info span { color:var(--muted); font-size:13px; }
+        .remove-item {
+            color: var(--muted);
+            font-size: 14px;
+            padding: 8px;
+        }
+        .remove-item:hover { color: var(--accent); }
+        .cart-empty {
+            text-align: center;
+            color: var(--muted);
+            padding: 60px 20px;
+        }
+        .cart-footer {
+            padding: 20px 22px 24px;
+            border-top: 1px solid rgba(26,26,46,.08);
+        }
+        .cart-total {
+            display:flex;
+            justify-content:space-between;
+            font-weight:700;
+            font-size:18px;
+            margin-bottom:14px;
+        }
+        .checkout-btn { width:100%; }
+        .header-actions .icon-btn.active {
+            color: var(--accent);
+            background: var(--accent-light);
+        }
+        .search-clear {
+            display:none;
+            padding: 6px;
+            color: var(--muted);
+        }
+        .search-wrap.has-value .search-clear { display:block; }
+
         /* ========== RESPONSIVE ========== */
         @media (max-width: 1200px) {
             .products-grid {
@@ -1016,7 +1120,7 @@
                 font-size: 20px;
             }
             .search-wrap {
-                min-width: 120px;
+                min-width: 110px;
                 padding: 0 10px 0 14px;
             }
             .search-wrap input {
@@ -1146,7 +1250,8 @@
 
             <div style="display:flex;align-items:center;gap:10px;">
                 <div class="search-wrap" role="search">
-                    <input type="search" id="searchInput" placeholder="Search products..." aria-label="Search" />
+                    <input type="search" id="searchInput" placeholder="Search products..." aria-label="Search products" />
+                    <button class="search-clear" id="searchClear" aria-label="Clear search"><i class="fas fa-times"></i></button>
                     <button id="searchBtn" aria-label="Submit search"><i class="fas fa-search"></i></button>
                 </div>
 
@@ -1300,6 +1405,28 @@
 
     </main>
 
+
+    <!-- ===== CART DRAWER ===== -->
+    <div class="cart-overlay" id="cartOverlay"></div>
+    <aside class="cart-drawer" id="cartDrawer" aria-label="Shopping cart" aria-hidden="true">
+        <div class="cart-drawer-header">
+            <h3>Your Cart</h3>
+            <button class="close-cart" id="closeCart" aria-label="Close cart">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <div class="cart-items" id="cartItems"></div>
+        <div class="cart-footer">
+            <div class="cart-total">
+                <span>Total</span>
+                <span id="cartTotal">$0</span>
+            </div>
+            <button class="btn btn-primary checkout-btn" id="checkoutBtn">
+                <i class="fas fa-lock"></i> Secure Checkout
+            </button>
+        </div>
+    </aside>
+
     <!-- ===== FOOTER ===== -->
     <footer>
         <div class="container">
@@ -1420,7 +1547,10 @@
         // ============================================================
         // STATE
         // ============================================================
-        let cartCount = 0;
+        let cart = JSON.parse(localStorage.getItem('nexusCart') || '[]');
+        let wishlist = JSON.parse(localStorage.getItem('nexusWishlist') || '[]');
+
+        const cartCount = () => cart.reduce((sum, item) => sum + item.qty, 0);
 
         // ============================================================
         // DOM REFS
@@ -1430,12 +1560,18 @@
         const cartCountEl = document.getElementById('cartCount');
         const searchInput = document.getElementById('searchInput');
         const searchBtn = document.getElementById('searchBtn');
+        const searchClear = document.getElementById('searchClear');
         const mobileToggle = document.getElementById('mobileToggle');
         const mobileMenu = document.getElementById('mobileMenu');
         const newsletterForm = document.getElementById('newsletterForm');
         const newsletterEmail = document.getElementById('newsletterEmail');
         const newsletterMsg = document.getElementById('newsletterMsg');
         const testimonialsList = document.getElementById('testimonialsList');
+        const cartDrawer = document.getElementById('cartDrawer');
+        const cartOverlay = document.getElementById('cartOverlay');
+        const cartItemsEl = document.getElementById('cartItems');
+        const cartTotalEl = document.getElementById('cartTotal');
+        const closeCart = document.getElementById('closeCart');
 
         // ============================================================
         // RENDER FUNCTIONS
@@ -1478,7 +1614,9 @@
                     <div class="img-wrap">
                         <img src="${p.img}" alt="${escapeHtml(p.title)}" loading="lazy">
                         ${badgeHtml}
-                        <button class="wish-btn" aria-label="Add to wishlist"><i class="far fa-heart"></i></button>
+                        <button class="wish-btn ${wishlist.includes(p.id) ? 'active' : ''}" data-wishlist-id="${p.id}" aria-label="${wishlist.includes(p.id) ? 'Remove from wishlist' : 'Add to wishlist'}">
+                            <i class="${wishlist.includes(p.id) ? 'fas' : 'far'} fa-heart"></i>
+                        </button>
                     </div>
                     <div class="body">
                         <div class="category-tag">${p.category}</div>
@@ -1504,6 +1642,13 @@
                     e.stopPropagation();
                     const id = Number(this.dataset.id);
                     addToCart(id, this);
+                });
+            });
+
+            productsGrid.querySelectorAll('.wish-btn').forEach(btn => {
+                btn.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    toggleWishlist(Number(this.dataset.wishlistId), this);
                 });
             });
         }
@@ -1542,17 +1687,28 @@
             } [s]));
         }
 
+        function saveState() {
+            localStorage.setItem('nexusCart', JSON.stringify(cart));
+            localStorage.setItem('nexusWishlist', JSON.stringify(wishlist));
+        }
+
         function updateCartCount() {
-            cartCountEl.textContent = cartCount;
-            // animate
+            const count = cartCount();
+            cartCountEl.textContent = count;
             cartCountEl.style.transform = 'scale(1.3)';
             setTimeout(() => cartCountEl.style.transform = 'scale(1)', 200);
+            renderCart();
         }
 
         function addToCart(productId, btnEl) {
             const p = PRODUCTS.find(x => x.id === productId);
             if (!p) return;
-            cartCount++;
+
+            const existing = cart.find(item => item.id === productId);
+            if (existing) existing.qty++;
+            else cart.push({ id: productId, qty: 1 });
+
+            saveState();
             updateCartCount();
 
             if (btnEl) {
@@ -1564,10 +1720,83 @@
                     btnEl.classList.remove('added');
                 }, 1500);
             }
-            // subtle feedback
+
             const cartBtn = document.getElementById('cartBtn');
             cartBtn.style.color = 'var(--accent)';
             setTimeout(() => cartBtn.style.color = '', 400);
+        }
+
+        function toggleWishlist(productId, button) {
+            if (wishlist.includes(productId)) {
+                wishlist = wishlist.filter(id => id !== productId);
+                button.classList.remove('active');
+                button.setAttribute('aria-label', 'Add to wishlist');
+                button.innerHTML = '<i class="far fa-heart"></i>';
+            } else {
+                wishlist.push(productId);
+                button.classList.add('active');
+                button.setAttribute('aria-label', 'Remove from wishlist');
+                button.innerHTML = '<i class="fas fa-heart"></i>';
+            }
+            saveState();
+        }
+
+        function renderCart() {
+            if (!cart.length) {
+                cartItemsEl.innerHTML = '<div class="cart-empty"><i class="fas fa-shopping-bag" style="font-size:34px;margin-bottom:12px;"></i><p>Your cart is empty.</p></div>';
+                cartTotalEl.textContent = '$0';
+                return;
+            }
+
+            let total = 0;
+            cartItemsEl.innerHTML = '';
+
+            cart.forEach(item => {
+                const p = item.id === 999
+                    ? { id: 999, title: 'MacBook Air M2 — Flash Deal', price: 999,
+                        img: 'https://images.unsplash.com/photo-1517336714731-489689fd1ca8?auto=format&fit=crop&w=800&q=80' }
+                    : PRODUCTS.find(product => product.id === item.id);
+                if (!p) return;
+                total += p.price * item.qty;
+
+                const row = document.createElement('div');
+                row.className = 'cart-item';
+                row.innerHTML = `
+                    <img src="${p.img}" alt="${escapeHtml(p.title)}">
+                    <div class="cart-item-info">
+                        <strong>${escapeHtml(p.title)}</strong>
+                        <span>$${p.price.toLocaleString()} × ${item.qty}</span>
+                    </div>
+                    <button class="remove-item" data-remove-id="${p.id}" aria-label="Remove ${escapeHtml(p.title)}">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                `;
+                cartItemsEl.appendChild(row);
+            });
+
+            cartTotalEl.textContent = '$' + total.toLocaleString();
+            cartItemsEl.querySelectorAll('.remove-item').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const id = Number(btn.dataset.removeId);
+                    cart = cart.filter(item => item.id !== id);
+                    saveState();
+                    updateCartCount();
+                });
+            });
+        }
+
+        function openCart() {
+            renderCart();
+            cartDrawer.classList.add('open');
+            cartOverlay.classList.add('open');
+            cartDrawer.setAttribute('aria-hidden', 'false');
+            closeCart.focus();
+        }
+
+        function hideCart() {
+            cartDrawer.classList.remove('open');
+            cartOverlay.classList.remove('open');
+            cartDrawer.setAttribute('aria-hidden', 'true');
         }
 
         function filterProducts(query) {
@@ -1587,8 +1816,11 @@
         // DEAL TIMER
         // ============================================================
         (function setupDealTimer() {
-            const now = new Date();
-            const target = new Date(now.getTime() + (24 * 60 + 36) * 60 * 1000);
+            const savedDeadline = Number(localStorage.getItem('nexusDealDeadline'));
+            const target = savedDeadline > Date.now()
+                ? new Date(savedDeadline)
+                : new Date(Date.now() + (24 * 60 + 36) * 60 * 1000);
+            localStorage.setItem('nexusDealDeadline', target.getTime());
 
             function tick() {
                 const diff = target - new Date();
@@ -1617,9 +1849,24 @@
         // ============================================================
 
         // Search
-        searchBtn.addEventListener('click', () => filterProducts(searchInput.value));
+        const performSearch = () => {
+            filterProducts(searchInput.value);
+            searchInput.parentElement.classList.toggle('has-value', !!searchInput.value.trim());
+        };
+        searchBtn.addEventListener('click', performSearch);
+        searchInput.addEventListener('input', performSearch);
         searchInput.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter') filterProducts(e.target.value);
+            if (e.key === 'Enter') performSearch();
+            if (e.key === 'Escape') {
+                searchInput.value = '';
+                performSearch();
+                searchInput.focus();
+            }
+        });
+        searchClear.addEventListener('click', () => {
+            searchInput.value = '';
+            performSearch();
+            searchInput.focus();
         });
 
         // Mobile menu
@@ -1647,7 +1894,14 @@
 
         // Deal buy
         document.getElementById('buyDeal').addEventListener('click', function() {
-            cartCount++;
+            // Demo deal is represented by a separate cart line item.
+            const dealId = 999;
+            const existing = cart.find(item => item.id === dealId);
+            if (existing) existing.qty++;
+            else cart.push({ id: dealId, qty: 1 });
+
+            // Keep the deal in cart state even though it isn't part of the product grid.
+            saveState();
             updateCartCount();
             const orig = this.innerHTML;
             this.innerHTML = '<i class="fas fa-check"></i> Added!';
@@ -1677,9 +1931,33 @@
             }, 3500);
         });
 
-        // Cart button click feedback
-        document.getElementById('cartBtn').addEventListener('click', () => {
-            alert(`🛒 Your cart has ${cartCount} item${cartCount !== 1 ? 's' : ''}.`);
+        // Cart drawer
+        document.getElementById('cartBtn').addEventListener('click', openCart);
+        closeCart.addEventListener('click', hideCart);
+        cartOverlay.addEventListener('click', hideCart);
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') hideCart();
+        });
+
+        // Account / wishlist header actions
+        document.querySelector('[aria-label="Account"]').addEventListener('click', () => {
+            alert('Account sign-in is ready to be connected to your authentication service.');
+        });
+        document.querySelector('[aria-label="Wishlist"]').addEventListener('click', () => {
+            const saved = PRODUCTS.filter(p => wishlist.includes(p.id));
+            if (!saved.length) {
+                alert('Your wishlist is empty.');
+                return;
+            }
+            alert(`❤️ You have ${saved.length} item${saved.length !== 1 ? 's' : ''} in your wishlist.`);
+        });
+
+        document.getElementById('checkoutBtn').addEventListener('click', () => {
+            if (!cart.length) {
+                alert('Your cart is empty.');
+                return;
+            }
+            alert('Checkout demo: connect this button to your payment/checkout backend.');
         });
 
         // Year in footer
@@ -1692,6 +1970,7 @@
         renderProducts(PRODUCTS);
         renderTestimonials();
         updateCartCount();
+        searchInput.parentElement.classList.toggle('has-value', !!searchInput.value.trim());
 
         // Close mobile menu on resize to desktop
         window.addEventListener('resize', () => {
